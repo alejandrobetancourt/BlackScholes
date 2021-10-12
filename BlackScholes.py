@@ -5,7 +5,7 @@ from scipy.stats import norm
 #We use the norm package from scipy to import the density and distribution functions of a Gaussian
 
 def GeomBrown(S0, mu, vol, T, n=1):
-    '''Gives a lognormal random print("{}".format(a))variable at expiry time'''
+    '''Gives a lognormal random variable at expiry time'''
     mean = (mu - vol**2 / 2)*T
     sigma = vol * np.sqrt(T)
     W = np.random.lognormal(mean, sigma, size=(n,1))
@@ -51,7 +51,7 @@ def call_delta(S, K, vol, r, T, t):
 
 def put_delta(S, K, vol, r, T, t):
     n1 = d1(S, K, vol, r, T, t)
-    return -N(-n1)
+    return -norm.cdf(-n1)
 
 
 def call_gamma(S, K, vol, r, T, t):
@@ -107,6 +107,19 @@ class BlackScholes:
         self.expiry = T 
         self.time = t
 
+    def __add__(self, other):
+        helper = BlackScholes(self.spot, self.vol, self.rate, self.expiry, self.time)
+        helper.payoff = lambda x : self.payoff(x) + other.payoff(x)
+        return helper
+
+    def __sub__(self, other):
+        helper = BlackScholes(self.spot, self.vol, self.rate, self.expiry, self.time)
+        helper.payoff = lambda x : self.payoff(x) - other.payoff(x)
+        return helper
+
+    def payoff(x):
+        pass
+
 
 class Call(BlackScholes):
     def __init__(self, S, K, vol, r, T, t):
@@ -131,7 +144,7 @@ class Call(BlackScholes):
     def rho(self):
         return call_rho(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
-    def gamma(self):
+    def theta(self):
         return call_theta(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
 
@@ -158,7 +171,7 @@ class Put(BlackScholes):
     def rho(self):
         return put_rho(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
-    def gamma(self):
+    def theta(self):
         return put_theta(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
 
@@ -169,7 +182,6 @@ class DigitalCall(BlackScholes):
 
     def payoff(self, x):
         return 1.0 * (x > self.strike)
-
 
     def price(self):
         S = self.spot
@@ -189,7 +201,6 @@ class DigitalPut(BlackScholes):
 
     def payoff(self, x):
         return 1.0 * (x < self.strike)
-
 
     def price(self):
         S = self.spot
@@ -216,14 +227,44 @@ class MonteCarlo:
         num_steps = self.stop
         spot_at_expiry = GeomBrown(spot, rate, vol, expiry, num_steps).reshape(-1)
         payoffs = option.payoff(spot_at_expiry)
-        return np.exp(-rate * expiry) * np.mean(payoffs)
+        payoffs = np.exp(-rate * expiry) * payoffs
+        return np.mean(payoffs), np.std(payoffs)/np.sqrt(num_steps)
+
+    def delta(self, epsilon = .001):
+        option = self.option
+        spot = option.spot
+        rate = option.rate
+        vol = option.vol
+        expiry = option.expiry - option.time
+        num_steps = self.stop
+        spot_at_expiry = GeomBrown(spot, rate, vol, expiry, num_steps).reshape(-1)
+        spot_at_expiry_epsilon = (1 + (epsilon/spot)) * spot_at_expiry
+        values = option.payoff(spot_at_expiry)
+        values_epsilon = option.payoff(spot_at_expiry_epsilon)
+        deltas = (values_epsilon - values)/epsilon
+        return np.mean(deltas), np.std(deltas)/np.sqrt(num_steps)
+
+    def gamma(self, epsilon = .001):
+        option = self.option
+        spot = option.spot
+        rate = option.rate
+        vol = option.vol
+        expiry = option.expiry - option.time
+        num_steps = self.stop
+        spot_at_expiry = GeomBrown(spot, rate, vol, expiry, num_steps).reshape(-1)
+        spot_at_expiry_plusepsilon = (1 + (epsilon/spot)) * spot_at_expiry
+        spot_at_expiry_minusepsilon = (1 - (epsilon/spot)) * spot_at_expiry
+        values = option.payoff(spot_at_expiry)
+        values_plusepsilon = option.payoff(spot_at_expiry_plusepsilon)
+        values_minusepsilon = option.payoff(spot_at_expiry_minusepsilon)
+        deltas = (values_plusepsilon - 2*values + values_minusepsilon)/epsilon**2
+        return np.mean(deltas), np.std(deltas)/np.sqrt(num_steps)
 
 
-
-
-option = DigitalPut(55, 66, .2, .1, 1, 0)
-mc = MonteCarlo(option, 10000)
+option = Call(77, 95, .5, .01, 5/12, 0)
+suma = option + option
+mc = MonteCarlo(option, 100000)
 a = mc.price()
 print("{}".format(a))
-b = option.price()
+b = suma.payoff(100)
 print("{}".format(b))
