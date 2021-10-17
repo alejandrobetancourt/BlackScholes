@@ -74,7 +74,7 @@ def call_theta(S, K, vol, r, T, t):
     n1 = d1(S, K, vol, r, T, t)
     n2 = d2(S, K, vol, r, T, t)
     x = S * norm.pdf(n1) * vol / (2 * np.sqrt(T-t))
-    y = r * np.exp(-r * (T-t)) * norm.cdf(n2)
+    y = r * K * np.exp(-r * (T-t)) * norm.cdf(n2)
     return -x - y
 
 
@@ -82,7 +82,7 @@ def put_theta(S, K, vol, r, T, t):
     n1 = d1(S, K, vol, r, T, t)
     n2 = d2(S, K, vol, r, T, t)
     x = S * norm.pdf(n1) * vol / (2 * np.sqrt(T-t))
-    y = r * np.exp(-r * (T-t)) * norm.cdf(-n2)
+    y = r * K * np.exp(-r * (T-t)) * norm.cdf(-n2)
     return -x + y
 
 
@@ -110,12 +110,77 @@ class BlackScholes:
     def __add__(self, other):
         helper = BlackScholes(self.spot, self.vol, self.rate, self.expiry, self.time)
         helper.payoff = lambda x : self.payoff(x) + other.payoff(x)
+        if (hasattr(self, "price") * hasattr(other, "price")):
+            helper.price = lambda  : self.price() + other.price()
+
+        if (hasattr(self, "delta") * hasattr(other, "delta")):
+            helper.delta = lambda  : self.delta() + other.delta()
+
+        if (hasattr(self, "gamma") * hasattr(other, "gamma")):
+            helper.gamma = lambda  : self.gamma() + other.gamma()
+
+        if (hasattr(self, "vega") * hasattr(other, "vega")):
+            helper.vega = lambda  : self.vega() + other.vega()
+
+        if (hasattr(self, "theta") * hasattr(other, "theta")):
+            helper.theta = lambda  : self.theta() + other.theta()
+
+        if (hasattr(self, "rho") * hasattr(other, "rho")):
+            helper.rho = lambda  : self.rho() + other.rho()
+
         return helper
 
     def __sub__(self, other):
         helper = BlackScholes(self.spot, self.vol, self.rate, self.expiry, self.time)
         helper.payoff = lambda x : self.payoff(x) - other.payoff(x)
+
+        if (hasattr(self, "price") * hasattr(other, "price")):
+            helper.price = lambda  : self.price() - other.price()
+
+        if (hasattr(self, "delta") * hasattr(other, "delta")):
+            helper.delta = lambda  : self.delta() - other.delta()
+
+        if (hasattr(self, "gamma") * hasattr(other, "gamma")):
+            helper.gamma = lambda  : self.gamma() - other.gamma()
+
+        if (hasattr(self, "vega") * hasattr(other, "vega")):
+            helper.vega = lambda  : self.vega() - other.vega()
+
+        if (hasattr(self, "theta") * hasattr(other, "theta")):
+            helper.theta = lambda  : self.theta() - other.theta()
+
+        if (hasattr(self, "rho") * hasattr(other, "rho")):
+            helper.rho = lambda  : self.rho() - other.rho()
+
         return helper
+
+    def __mul__(self, other):
+        if isinstance(other, (float, int)):
+            helper = BlackScholes(self.spot, self.vol, self.rate, self.expiry, self.time)
+            helper.payoff = lambda x : other * self.payoff(x)
+
+            if hasattr(self, "price"):
+                helper.price = lambda : other * self.price()
+
+            if hasattr(self, "delta"):
+                helper.delta = lambda : other * self.delta()
+
+            if hasattr(self, "gamma"):
+                helper.gamma = lambda : other * self.gamma()
+
+            if hasattr(self, "vega"):
+                helper.vega = lambda : other * self.vega()
+
+            if hasattr(self, "theta"):
+                helper.theta = lambda : other * self.theta()
+
+            if hasattr(self, "rho"):
+                helper.rho = lambda : other * self.rho()
+
+            return helper
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
 
     def payoff(x):
         pass
@@ -260,11 +325,56 @@ class MonteCarlo:
         deltas = (values_plusepsilon - 2*values + values_minusepsilon)/epsilon**2
         return np.mean(deltas), np.std(deltas)/np.sqrt(num_steps)
 
+    def vega(self, epsilon = .001):
+        option = self.option
+        spot = option.spot
+        rate = option.rate
+        vol = option.vol
+        expiry = option.expiry - option.time
+        num_steps = self.stop
+        normals = np.random.normal(0,1, num_steps)
+        vol_epsilon = vol + epsilon
+        exponent = (rate-vol**2/2)*expiry - vol*np.sqrt(expiry)*normals
+        exponent_epsilon = (rate-vol_epsilon**2/2)*expiry - vol_epsilon*np.sqrt(expiry)*normals
+        spot_at_expiry = spot * np.exp(exponent)
+        spot_at_expiry_epsilon = spot * np.exp(exponent_epsilon)
+        values = option.payoff(spot_at_expiry)
+        values_epsilon = option.payoff(spot_at_expiry_epsilon)
+        vegas = (values_epsilon - values)/epsilon
+        return np.mean(vegas), np.std(vegas)/np.sqrt(num_steps)
 
-option = Call(77, 95, .5, .01, 5/12, 0)
-suma = option + option
-mc = MonteCarlo(option, 100000)
-a = mc.price()
-print("{}".format(a))
-b = suma.payoff(100)
-print("{}".format(b))
+    def rho(self, epsilon = .001):
+        option = self.option
+        spot = option.spot
+        rate = option.rate
+        vol = option.vol
+        expiry = option.expiry - option.time
+        num_steps = self.stop
+        normals = np.random.normal(0,1, num_steps)
+        rate_epsilon = rate + epsilon
+        exponent = (rate-vol**2/2)*expiry - vol*np.sqrt(expiry)*normals
+        exponent_epsilon = (rate_epsilon-vol**2/2)*expiry - vol*np.sqrt(expiry)*normals
+        spot_at_expiry = spot * np.exp(exponent)
+        spot_at_expiry_epsilon = spot * np.exp(exponent_epsilon)
+        values = np.exp(-rate * expiry) * option.payoff(spot_at_expiry)
+        values_epsilon = np.exp(-rate_epsilon * expiry) * option.payoff(spot_at_expiry_epsilon)
+        rhos = (values_epsilon - values)/epsilon
+        return np.mean(rhos), np.std(rhos)/np.sqrt(num_steps)
+
+    def theta(self, epsilon = .001):
+        option = self.option
+        spot = option.spot
+        rate = option.rate
+        vol = option.vol
+        expiry = option.expiry - option.time
+        num_steps = self.stop
+        normals = np.random.normal(0,1, num_steps)
+        expiry_epsilon = expiry - epsilon
+        exponent = (rate-vol**2/2)*expiry - vol*np.sqrt(expiry)*normals
+        exponent_epsilon = (rate-vol**2/2)*expiry_epsilon - vol*np.sqrt(expiry_epsilon)*normals
+        spot_at_expiry = spot * np.exp(exponent)
+        spot_at_expiry_epsilon = spot * np.exp(exponent_epsilon)
+        values = np.exp(-rate * expiry) * option.payoff(spot_at_expiry)
+        values_epsilon =  np.exp(-rate * expiry_epsilon) * option.payoff(spot_at_expiry_epsilon)
+        thetas = ( values_epsilon - values)/epsilon
+        return np.mean(thetas), np.std(thetas)/np.sqrt(num_steps)
