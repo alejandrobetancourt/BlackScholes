@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import norm
 
 #We define some functions that we will be using repeatedly
@@ -96,6 +97,16 @@ def put_rho(S, K, vol, r, T, t):
     return -K * (T-t) * np.exp(-r * (T-t)) * norm.cdf(-n2)
 
 
+def digital_call(S, K, vol, r, T, t):
+    n2 = d2(S, K, vol, r, T, t)
+    return np.exp(-r *(T-t)) * norm.cdf(n2)
+
+
+def digital_put(S, K, vol, r, T, t):
+    n2 = d2(S, K, vol, r, T, t)
+    return np.exp(-r *(T-t)) * norm.cdf(-n2)
+
+
 #We define objects that represent Black Scholes objects
 
 
@@ -182,8 +193,40 @@ class BlackScholes:
     def __rmul__(self, other):
         return self.__mul__(other)
 
-    def payoff(x):
+    def payoff(self, x):
         pass
+
+    def plot_time(self, time_delta = .01):
+        if hasattr(self, "bs_formula"):
+            S = self.spot
+            K = self.strike
+            vol = self.vol
+            r = self.rate
+            T = self.expiry
+            times = np.arange(self.time, T, time_delta)
+            func = self.bs_formula()
+            plt.grid()
+            plt.xlabel("Time elapsed in years")
+            plt.ylabel("Price of the option")
+            plt.plot(times, func(S, K, vol, r, T, times))
+        else:
+            print("Unable to plot because there is no explicit formula for price.")
+
+    def plot_spot(self, spot_delta = .01):
+        if hasattr(self, "bs_formula"):
+            S = np.arange(.5 * self.spot, 1.5 * self.spot, spot_delta)
+            K = self.strike
+            vol = self.vol
+            r = self.rate
+            T = self.expiry
+            t = self.time
+            func = self.bs_formula()
+            plt.grid()
+            plt.xlabel("Value of the spot")
+            plt.ylabel("Price of the option")
+            plt.plot(S, func(S, K, vol, r, T, t))
+        else:
+            print("Unable to plot because there is no explicit formula for price.")
 
 
 class Call(BlackScholes):
@@ -212,6 +255,10 @@ class Call(BlackScholes):
     def theta(self):
         return call_theta(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
+    def bs_formula(self):
+        func = call
+        return func
+
 
 class Put(BlackScholes):
     def __init__(self, S, K, vol, r, T, t):
@@ -239,6 +286,10 @@ class Put(BlackScholes):
     def theta(self):
         return put_theta(self.spot, self.strike, self.vol, self.rate, self.expiry, self.time)
 
+    def bs_formula(self):
+        func = put
+        return func
+
 
 class DigitalCall(BlackScholes):
     def __init__(self, S, K, vol, r, T, t):
@@ -252,11 +303,14 @@ class DigitalCall(BlackScholes):
         S = self.spot
         K = self.strike
         vol = self.vol
+        r = self.rate
         T = self.expiry
         t = self.time
-        r = self.rate
-        n2 = d2(S, K, vol, r, T, t)
-        return np.exp(-r *(T-t)) * norm.cdf(n2)
+        return digital_call(S, K, vol, r, T, t)
+
+    def bs_formula(self):
+        func = digital_call
+        return func
 
 
 class DigitalPut(BlackScholes):
@@ -271,11 +325,14 @@ class DigitalPut(BlackScholes):
         S = self.spot
         K = self.strike
         vol = self.vol
+        r = self.rate
         T = self.expiry
         t = self.time
-        r = self.rate
-        n2 = d2(S, K, vol, r, T, t)
-        return np.exp(-r *(T-t)) * norm.cdf(-n2)
+        return digital_put(S, K, vol, r, T, t)
+
+    def bs_formula(self):
+        func = digital_put
+        return func
 
 
 class MonteCarlo:
@@ -378,3 +435,21 @@ class MonteCarlo:
         values_epsilon =  np.exp(-rate * expiry_epsilon) * option.payoff(spot_at_expiry_epsilon)
         thetas = ( values_epsilon - values)/epsilon
         return np.mean(thetas), np.std(thetas)/np.sqrt(num_steps)
+
+
+
+
+
+option = Call(49, 50, 1.04, .01, 3/12, 0)
+option2 = Call(49, 110, 1.04, .01, 3/12, 0)
+
+suma = 2 * option - option2 + DigitalPut(49, 85, 1.04, .01, 3/12, 0)
+
+mc = MonteCarlo(suma, 10000)
+a = mc.price()
+b = suma.price()
+c = hasattr(mc, "price")
+
+print("{}".format(a))
+print("{}".format(b))
+print("{}".format(c))
