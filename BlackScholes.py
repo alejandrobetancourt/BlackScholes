@@ -214,7 +214,7 @@ class BlackScholes:
 
     def plot_spot(self, spot_delta = .01):
         if hasattr(self, "bs_formula"):
-            S = np.arange(.5 * self.spot, 1.5 * self.spot, spot_delta)
+            S = np.arange(.4 * self.spot, 1.8 * self.spot, spot_delta)
             K = self.strike
             vol = self.vol
             r = self.rate
@@ -435,21 +435,3 @@ class MonteCarlo:
         values_epsilon =  np.exp(-rate * expiry_epsilon) * option.payoff(spot_at_expiry_epsilon)
         thetas = ( values_epsilon - values)/epsilon
         return np.mean(thetas), np.std(thetas)/np.sqrt(num_steps)
-
-
-
-
-
-option = Call(49, 50, 1.04, .01, 3/12, 0)
-option2 = Call(49, 110, 1.04, .01, 3/12, 0)
-
-suma = 2 * option - option2 + DigitalPut(49, 85, 1.04, .01, 3/12, 0)
-
-mc = MonteCarlo(suma, 10000)
-a = mc.price()
-b = suma.price()
-c = hasattr(mc, "price")
-
-print("{}".format(a))
-print("{}".format(b))
-print("{}".format(c))
